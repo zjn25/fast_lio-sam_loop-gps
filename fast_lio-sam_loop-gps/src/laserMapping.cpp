@@ -37,6 +37,7 @@
 #include <math.h>
 #include <thread>
 #include <fstream>
+#include <iomanip>
 #include <csignal>
 #include <exception>
 #include <unistd.h>
@@ -332,7 +333,100 @@ void publish_global_path();  // 发布pubGPSOdometry(natfix)+global_path
 shared_ptr<Preprocess> p_pre(new Preprocess());   // 点云预处理器
 shared_ptr<ImuProcess> p_imu(new ImuProcess());   // imu预处理器
 
+#include "core/resource_monitor.hpp"
 #include "core/fast_lio_impl.hpp"
+
+bool resource_log_en = true;
+double resource_log_period = 5.0;
+std::ofstream resource_log_file;
+double last_resource_log_wall = 0.0;
+double last_odom_ms = 0.0;
+
+size_t count_cloud_points(const std::vector<pcl::PointCloud<PointType>::Ptr> &clouds)
+{
+    size_t n = 0;
+    for (const auto &c : clouds)
+        if (c) n += c->size();
+    return n;
+}
+
+size_t count_color_points(const std::vector<pcl::PointCloud<pcl::PointXYZRGB>::Ptr> &clouds)
+{
+    size_t n = 0;
+    for (const auto &c : clouds)
+        if (c) n += c->size();
+    return n;
+}
+
+void log_mapping_profile(const char *tag, int frame_id, double odom_ms)
+{
+    if (!resource_log_en)
+        return;
+
+    const ResourceSample s = sample_resources();
+    const size_t kf = cloud_key_poses_6D ? cloud_key_poses_6D->size() : 0;
+    const size_t raw_pts = count_cloud_points(laser_cloud_raw_keyframes);
+    const size_t surf_pts = count_cloud_points(surf_cloud_keyframes);
+    const size_t color_pts = count_color_points(laser_cloud_color_keyframes);
+    const size_t pcd_wait = pcl_wait_save ? pcl_wait_save->size() : 0;
+    const size_t pcd_wait_rgb = pcl_wait_save_rgb ? pcl_wait_save_rgb->size() : 0;
+    const int ikd_valid = ikdtree.Root_Node ? ikdtree.validnum() : 0;
+    const int ikd_size = ikdtree.Root_Node ? ikdtree.size() : 0;
+    size_t img_q = 0;
+    {
+        std::lock_guard<std::mutex> lock(mtx_img);
+        img_q = img_buffer.size();
+    }
+
+    ROS_INFO("[profile][%s] frame=%d odom=%.1fms lidar_q=%zu imu_q=%zu img_q=%zu "
+             "ikdtree=%d/%d kf=%zu raw_pts=%zu surf_pts=%zu color_pts=%zu "
+             "pcd_wait=%zu/%zu map_subs=%d scan_subs=%d | %s",
+             tag, frame_id, odom_ms, lidar_buffer.size(), imu_buffer.size(), img_q,
+             ikd_valid, ikd_size, kf, raw_pts, surf_pts, color_pts,
+             pcd_wait, pcd_wait_rgb,
+             pubLaserCloudSurround.getNumSubscribers(),
+             pubLaserCloudFull_lidar.getNumSubscribers(),
+             format_resource_line(s).c_str());
+
+    if (s.mem_avail_mb < 800.0)
+        ROS_WARN("[profile] mem_avail=%.0fMB is low; large-scene mapping may OOM", s.mem_avail_mb);
+    if (lidar_buffer.size() > 20)
+        ROS_WARN("[profile] lidar_q=%zu, mapping is falling behind the sensor", lidar_buffer.size());
+    if (pcd_wait > 0 || pcd_wait_rgb > 0)
+        ROS_WARN("[profile] pcd_save buffer is growing (%zu / %zu pts); turn pcd_save_en off for city mapping",
+                 pcd_wait, pcd_wait_rgb);
+
+    if (resource_log_file.is_open())
+    {
+        resource_log_file << std::fixed
+            << ros::WallTime::now().toSec() << ","
+            << tag << ","
+            << frame_id << ","
+            << odom_ms << ","
+            << lidar_buffer.size() << ","
+            << imu_buffer.size() << ","
+            << img_q << ","
+            << ikd_valid << ","
+            << ikd_size << ","
+            << kf << ","
+            << raw_pts << ","
+            << surf_pts << ","
+            << color_pts << ","
+            << pcd_wait << ","
+            << pcd_wait_rgb << ","
+            << s.rss_mb << ","
+            << s.hwm_mb << ","
+            << s.peak_mb << ","
+            << s.vmsize_mb << ","
+            << s.proc_swap_mb << ","
+            << s.mem_avail_mb << ","
+            << s.swap_used_mb << ","
+            << s.load1 << ","
+            << s.proc_cpu_pct << "\n";
+        resource_log_file.flush();
+    }
+}
+
 #include "core/back_end_impl.hpp"
 
 int main(int argc, char** argv)
@@ -466,6 +560,18 @@ int main(int argc, char** argv)
     // ******************************* service *******************************
     nh.param<string>("service/save_directory", save_directory, "/home/mtcjyb/Documents/");
     nh.param<float>("service/global_map_server_leaf_size", global_map_server_leaf_size, 0.4);
+
+    nh.param<bool>("debug/resource_log_en", resource_log_en, true);
+    nh.param<double>("debug/resource_log_period", resource_log_period, 5.0);
+    if (resource_log_en)
+    {
+        const std::string resource_log_path = DEBUG_FILE_DIR("resource_monitor.csv");
+        resource_log_file.open(resource_log_path.c_str(), ios::out);
+        resource_log_file << "wall,tag,frame,odom_ms,lidar_q,imu_q,img_q,ikd_valid,ikd_size,"
+                             "kf,raw_pts,surf_pts,color_pts,pcd_wait,pcd_wait_rgb,"
+                             "rss_mb,hwm_mb,peak_mb,vmsize_mb,proc_swap_mb,mem_avail_mb,swap_used_mb,load1,cpu_pct\n";
+        ROS_INFO("[profile] writing %s every %.1fs", resource_log_path.c_str(), resource_log_period);
+    }
     
     // ***************************** optimization *****************************
     gtsam::ISAM2Params parameters;
@@ -768,7 +874,15 @@ int main(int argc, char** argv)
                     dump_lio_state_to_log(fp);
                 }
 
-                std::cout << "odometry cost time: " << t_odom.toc() << " ms" << std::endl << std::endl;
+                last_odom_ms = t_odom.toc();
+                std::cout << "odometry cost time: " << last_odom_ms << " ms" << std::endl << std::endl;
+                const double now_wall = ros::WallTime::now().toSec();
+                if (resource_log_en && (last_resource_log_wall <= 0.0 ||
+                    now_wall - last_resource_log_wall >= resource_log_period))
+                {
+                    log_mapping_profile("mapping", frame_num, last_odom_ms);
+                    last_resource_log_wall = now_wall;
+                }
             }
         }
 
@@ -816,6 +930,10 @@ int main(int argc, char** argv)
         }
         fclose(fp2);
     }
+
+    log_mapping_profile("shutdown", frame_num, last_odom_ms);
+    if (resource_log_file.is_open())
+        resource_log_file.close();
 
     loopthread.join(); //  分离线程
     visualizeMapThread.join();

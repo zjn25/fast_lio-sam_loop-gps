@@ -937,8 +937,11 @@ bool save_map_service(fast_lio_sam_loop::save_map::Request &req, fast_lio_sam_lo
     res.success = false;
     if (cloud_key_poses_6D->size() < 1) {
         ROS_WARN("save_map: no keyframe yet, file not written");
+        log_mapping_profile("save_map_empty", 0, 0.0);
         return true;
     }
+    log_mapping_profile("save_map_begin", static_cast<int>(cloud_key_poses_6D->size()), 0.0);
+    const ros::WallTime save_t0 = ros::WallTime::now();
 
         const float leaf = req.resolution > 0.f ? req.resolution : global_map_server_leaf_size;
         std::string output_path = save_directory + "globalmap_lidar_feature.pcd";
@@ -993,6 +996,10 @@ bool save_map_service(fast_lio_sam_loop::save_map::Request &req, fast_lio_sam_lo
                 return true;
             }
             ROS_INFO("save_map wrote %s", output_path.c_str());
+            ROS_INFO("[profile][save_map] color pts in=%.3fs leaf=%.2f out_pts=%zu",
+                     (ros::WallTime::now() - save_t0).toSec(), leaf, globalColorDS->size());
+            log_mapping_profile("save_map_end", static_cast<int>(cloud_key_poses_6D->size()),
+                                (ros::WallTime::now() - save_t0).toSec() * 1000.0);
             res.success = true;
             return true;
         }
@@ -1011,6 +1018,10 @@ bool save_map_service(fast_lio_sam_loop::save_map::Request &req, fast_lio_sam_lo
             return true;
         }
         ROS_INFO("save_map wrote %s", output_path.c_str());
+        ROS_INFO("[profile][save_map] raw pts in=%.3fs leaf=%.2f out_pts=%zu",
+                 (ros::WallTime::now() - save_t0).toSec(), leaf, globalMapCloud->size());
+        log_mapping_profile("save_map_end", static_cast<int>(cloud_key_poses_6D->size()),
+                            (ros::WallTime::now() - save_t0).toSec() * 1000.0);
 
         res.success = true;
 		return true;

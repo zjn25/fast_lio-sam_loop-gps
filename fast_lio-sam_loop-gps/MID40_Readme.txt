@@ -216,7 +216,16 @@ city 分支默认半径 0，避免 NX 上有订阅者时按 1000 m 每秒重拼�
 和 save_map 保存的 PCD 带 rgb。RViz 里把对应 PointCloud2 的 Color Transformer
 改成 RGB8 才能看到颜色，排版不用改。
 
-5.13 service
+5.13 debug（city 分支）
+
+    resource_log_en       是否周期性打印系统资源和建图规模。默认 true
+    resource_log_period   打印间隔，秒。默认 5
+
+日志同时写到终端和 <包目录>/Log/resource_monitor.csv。
+看 rss、ikdtree、kf/raw_pts 的增长，以及 lidar_q 是否堆积，用来判断大场景该优化内存还是算力。
+save_map 前后也会各打一条，tag 为 save_map_begin / save_map_end。
+
+5.14 service
 
     save_directory                 默认保存目录。代码直接拼接文件名，末尾要有 /
     global_map_server_leaf_size    服务调用时 resolution 为 0 所使用的体素，米

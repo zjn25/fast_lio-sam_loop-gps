@@ -100,3 +100,7 @@ camera:
 service:
     save_directory: "/home/mtcjyb/Documents/"
     global_map_server_leaf_size: 0.4
+
+debug:
+    resource_log_en: true
+    resource_log_period: 5.0     # seconds. CSV: Log/resource_monitor.csv
