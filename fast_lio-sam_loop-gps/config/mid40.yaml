@@ -1,0 +1,94 @@
+common:
+    lid_topic:  "/livox/lidar"      # livox_ros_driver/CustomMsg, from livox_lidar_msg.launch
+    imu_topic:  "/imu"         # Mid-40 has no built-in IMU, use an external IMU
+    time_sync_en: true             # ONLY turn on when external time synchronization is really not possible
+    time_offset_lidar_to_imu: 0.0   # Time offset between lidar and IMU calibrated by other algorithms, e.g. LI-Init (can be found in README).
+                                    # This param will take effect no matter what time_sync_en is. So if the time offset is not known exactly, please set as 0.0
+frame:
+    odometry_frame: "odom"
+    map_frame:      "map"
+
+preprocess:
+    lidar_type: 1                # 1 for Livox serials LiDAR. Mid-40 uses the same CustomMsg path as Avia/Horizon.
+    scan_line: 1                 # Mid-40 is a single beam; CustomMsg.line is 0. Non-repetitive scan is undistorted by per-point offset_time.
+    blind: 0.5
+
+mapping:
+    acc_cov: 0.1
+    gyr_cov: 0.1
+    b_acc_cov: 0.0001
+    b_gyr_cov: 0.0001
+    fov_degree:    38.4          # Mid-40 circular FOV, degrees
+    det_range:     100.0
+    extrinsic_est_en:  false     # true: enable the online estimation of IMU-LiDAR extrinsic
+    extrinsic_T: [ 0.0, 0.0, 0.0 ]   # LiDAR pose in the IMU body frame. Fill in your mount.
+    extrinsic_R: [ 1, 0, 0,
+                   0, 1, 0,
+                   0, 0, 1]
+
+publish:
+    path_odom_en:  true
+    path_map_en:   true
+    scan_publish_en:  true
+    dense_publish_en: true
+    scan_bodyframe_pub_en: true
+    scan_lidarframe_pub_en: true
+    keyframe_pub_en: true
+
+pcd_save:
+    pcd_save_en: true
+    interval: -1
+
+time_save:
+    timestamp_save_en:  false
+
+odometry_mode:
+    correct_fe_en: false
+
+keyframe:
+    interval_th: 0.15
+    trans_th: 0.3
+    rot_rad_th: 0.0872
+
+loop:
+    loop_en: false
+    loop_frequency: 1.0
+    sparse_raw_point_cloud_en: true
+    history_kf_search_radius: 25.0
+    history_kf_search_time_diff: 25.0
+    history_kf_search_num: 25
+    history_kf_fitness_score: 0.4
+    surrounding_kf_search_radius: 30.0
+    surrounding_kf_density: 2.0
+    mapping_surf_leaf_size: 0.4
+
+gps:
+    gps_en: false
+
+visualization:
+    global_map_visualization_search_radius: 1000.0
+    global_map_visualization_pose_density:  1.0
+    global_map_visualization_leaf_size:     0.2
+
+camera:
+    img_en: true                          # true: subscribe img_topic and color the map. false: no camera needed
+    img_topic: "/camera/color/image_raw"
+    img_time_offset: 0.0                   # seconds added to the image stamp before matching the lidar
+    img_time_th: 0.05                      # max |image stamp - lidar stamp|, seconds
+    fx: 607.9208374023438
+    fy: 607.9892578125
+    cx: 322.2520751953125
+    cy: 251.91790771484375
+    k1: 0.0
+    k2: 0.0
+    p1: 0.0
+    p2: 0.0
+    # p_camera = Rcl * p_lidar + Pcl. Rcl is row-major.
+    Rcl: [-0.0162326,0.99986,0.00411583,
+          0.0124672,-0.00391365,0.999915,
+          0.999791,0.0162826,-0.0124019]
+    Pcl: [0.33795,-0.456468, 0.00895316]
+
+service:
+    save_directory: "/home/nan/catkin_18/fast_lio_sam_gps/src/fast_lio-sam_loop-gps/fast_lio-sam_loop-gps/PCD/"
+    global_map_server_leaf_size: 0.4

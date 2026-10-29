@@ -1,0 +1,4 @@
+float32 resolution   # voxel leaf size in meters. 0 keeps service/global_map_server_leaf_size from the yaml
+string destination    # output .pcd path, or a directory. Empty keeps save_directory + globalmap_lidar_feature.pcd
+---
+bool success
