@@ -37,8 +37,8 @@ publish:
     keyframe_pub_en: true
 
 pcd_save:
-    pcd_save_en: false
-    interval: -1
+    pcd_save_en: false           # keep false on NX: interval -1 would accumulate every frame in RAM
+    interval: -1                 # unused while pcd_save_en is false. Save maps with /service/save_map
 
 time_save:
     timestamp_save_en:  false
@@ -75,7 +75,7 @@ gps:
     manual_init_yaw: -1.57
 
 visualization:
-    global_map_visualization_search_radius: 1000.0
+    global_map_visualization_search_radius: 0.0    # 0 skips /visualization/map_global. A subscriber at 1000 m would rebuild the whole map at 1 Hz
     global_map_visualization_pose_density:  1.0
     global_map_visualization_leaf_size:     0.2
 

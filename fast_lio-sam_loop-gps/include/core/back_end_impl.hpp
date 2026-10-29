@@ -858,6 +858,9 @@ void publish_global_map()
 {   
     ros::Time timeLaserInfoStamp = ros::Time().fromSec(lidar_end_time);
 
+    if (global_map_visualization_search_radius <= 0.0)
+      return;
+
     if (pubLaserCloudSurround.getNumSubscribers() == 0)
       return;
 

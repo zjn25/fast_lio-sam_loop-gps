@@ -1,7 +1,7 @@
 Livox Mid-40 使用说明
 包名: fast_lio_sam_loop
 配置: config/mid40.yaml（无 GPS）、config/mid40_gps.yaml（带 GPS）
-RViz: rviz_cfg/loam_livox.rviz（沿用原排版）
+RViz: 默认不启动。需要时 roslaunch ... rviz:=true，配置 rviz_cfg/loam_livox.rviz
 
 Mid-40 是单线非重复扫描，没有内置 IMU。点云必须是 livox_ros_driver/CustomMsg
 （livox_lidar_msg.launch）。PointCloud2 没有逐点时间戳，不能用于去畸变。
@@ -28,9 +28,9 @@ lidar_type 固定为 1，scan_line 固定为 1（驱动里 line 恒为 0）。
 
     roslaunch fast_lio_sam_loop mapping_mid40_gps.launch
 
-不打开 RViz:
+打开 RViz（NX 上不要开，会订阅全局地图并每秒重拼）:
 
-    roslaunch fast_lio_sam_loop mapping_mid40.launch rviz:=false
+    roslaunch fast_lio_sam_loop mapping_mid40.launch rviz:=true
 
 雷达驱动另开一个终端，发布 CustomMsg 到 lid_topic（默认 /livox/lidar）。
 外部 IMU 发到 imu_topic。当前两个配置里的话题并不相同，以各自 yaml 为准:
@@ -67,15 +67,9 @@ destination 为空时，使用 yaml 的 service/save_directory 再接上文件�
 成功时服务返回 success: True，终端打印 leaf 和最终路径。
 还没有关键帧时返回失败，并打印 NO ENCOUGH POSE!。
 
-这条服务保存的是回环校正后的关键帧点云，体素由 resolution 决定。
-
-另一条是前端原始累积，与服务无关。pcd_save_en 为 true 且 interval 为 -1 时，
-Ctrl+C 退出节点后写成一个文件:
-
-    <包目录>/PCD/scans.pcd
-
-当前只有 mid40.yaml 打开了 pcd_save_en。这个文件不走回环校正，点会一直堆在内存里。
-interval 大于 0 时，每累计这么多帧就另存 PCD/scans_<序号>.pcd。
+这条服务保存的是关键帧点云（回环关闭时用前端 LIO 位姿），体素由 resolution 决定。
+city 分支默认关掉 pcd_save_en，建图过程中不把每帧点云堆在内存里。
+需要整图时调用 /service/save_map。
 
 
 4. GPS
@@ -114,7 +108,7 @@ use_gps_elevation 目前没有生效，高度总会被使用。
 
 5.1 launch 里的参数（覆盖 yaml，改完重新 launch）
 
-    rviz                    是否启动 RViz，默认 true
+    rviz                    是否启动 RViz，默认 false。NX 上保持关闭
     feature_extract_enable  0。Mid-40 用直接法，不要打开特征提取
     point_filter_num        2。每 N 个点取 1 个。Mid-40 点较稀，不要设得太大
     max_iteration           3。单帧迭代次数
@@ -164,8 +158,8 @@ use_gps_elevation 目前没有生效，高度总会被使用。
 
 5.7 pcd_save / time_save
 
-    pcd_save_en          退出时是否把前端累积点云写入 PCD/scans.pcd
-    interval             -1 表示全程一个文件；大于 0 表示每 N 帧存一个
+    pcd_save_en          city 分支默认 false。true 且 interval 为 -1 时每帧点云堆在内存里
+    interval             -1 表示全程一个文件；大于 0 表示每 N 帧写盘后清空
     timestamp_save_en    是否另存雷达时间戳
 
 5.8 keyframe
@@ -176,7 +170,7 @@ use_gps_elevation 目前没有生效，高度总会被使用。
 
 5.9 loop
 
-    loop_en                         回环开关。关掉后关键帧位姿不进后端，服务无法存图
+    loop_en                         回环开关。关掉时仍缓存 LIO 关键帧，/service/save_map 可存图
     loop_frequency                  回环检测频率，Hz
     sparse_raw_point_cloud_en       关键帧点云是否再抽稀，用于控制内存
     history_kf_search_radius        回环搜索半径，米
@@ -200,11 +194,12 @@ use_gps_elevation 目前没有生效，高度总会被使用。
 
 5.11 visualization
 
-    global_map_visualization_search_radius   显示全局图时的搜索半径，米
+    global_map_visualization_search_radius   显示全局图时的搜索半径，米。0 表示不发布 /visualization/map_global
     global_map_visualization_pose_density    显示用的关键帧间距，米。越小越密
     global_map_visualization_leaf_size       显示用体素，米。只影响 /visualization/map_global，不影响保存文件
 
-全局图大约每秒发布一次，话题 /visualization/map_global。
+全局图大约每秒发布一次，话题 /visualization/map_global。半径为 0 或没有订阅者时不拼图。
+city 分支默认半径 0，避免 NX 上有订阅者时按 1000 m 每秒重拼整图。
 
 5.12 camera
 

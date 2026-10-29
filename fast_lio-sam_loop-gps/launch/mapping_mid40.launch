@@ -1,7 +1,7 @@
 <launch>
   <!-- Livox Mid-40, no GPS. Point cloud must be livox_ros_driver/CustomMsg. -->
 
-    <arg name="rviz" default="true" />
+    <arg name="rviz" default="false" />
 
     <rosparam command="load" file="$(find fast_lio_sam_loop)/config/mid40.yaml" />
 
